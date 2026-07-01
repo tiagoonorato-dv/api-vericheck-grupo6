@@ -1,65 +1,119 @@
-# API VeriCheck - Módulo de Seguridad y Despliegue (Grupo 6)
+# API VeriCheck 2FA - Módulo de Seguridad y Despliegue (Grupo 6)
 
 > **Proyecto:** Tech Solutions  
-> **Componente:** Simulador de Servicio Externo de Validación de Identidad (VeriCheck)  
-> **Tecnologías:** Python 3.10+ | FastAPI | Uvicorn  
+> **Componente:** Simulador de Validación de Identidad con Doble Factor de Autenticación (2FA)  
+> **Tecnologías:** Python 3.10+ | FastAPI | Uvicorn
 
 ---
 
-## Descripción del Módulo
+# Descripción del Módulo
 
-Este componente de software pertenece al **Grupo 6**. Cumple la función de simular la API externa **VeriCheck**, requerida en el flujo de negocio para validar la autenticidad de los clientes y mitigar riesgos de fraude antes de procesar operaciones sensibles en la plataforma de la consultora.
+Este componente pertenece al **Grupo 6**.
 
-Cuenta con políticas de seguridad perimetral (**CORS** habilitado) y un **mecanismo automático de Logs de Auditoría** que registra en la consola del servidor cada petición con su respectiva estampa de tiempo e IP de origen.
+Implementa un flujo estricto de **Autenticación de Dos Pasos (2FA)**. En el primer paso se validan las reglas de negocio perimetrales y de prevención de fraude. Si la validación es exitosa, el sistema genera un **token dinámico de 6 dígitos**, que debe ser verificado en un segundo paso para completar el proceso de autenticación y otorgar el acceso final.
 
 ---
 
-## Endpoints (Puntos de Conexión)
+# Endpoints (Flujo de Conexión 2FA)
 
-La API expone los siguientes extremos para que los demás grupos puedan integrarse:
+La API expone los siguientes endpoints para que los demás grupos puedan integrarse.
 
-### Control de Estado (Health Check)
-* **URL:** `GET /health`
-* **Descripción:** Permite verificar si el servicio de VeriCheck está online en el servidor.
-* **Respuesta exitosa (HTTP 200):**
-```json
-{
-  "status": "online",
-  "grupo": "Grupo 6 - Seguridad y Despliegue"
-}
+## Paso 1: Solicitud de Validación de Identidad
 
-### Validación de Identidad
-* **URL:** POST /validar
-* **Descripción:** Recibe los datos del cliente y ejecuta las reglas de negocio de seguridad.
+**URL**
 
-**Estructura requerida del Cuerpo (JSON Body):**
+`POST /validar`
+
+**Descripción**
+
+Valida los datos del cliente y genera un token temporal de 6 dígitos, el cual puede visualizarse en la consola del servidor.
+
+**Body (JSON)**
+
 ```json
 {
   "dni_cuil": "42333444",
   "nombre_empresa": "Tech Solutions SRL"
 }
+```
 
-### Escenarios de Prueba e Integración (Casos de Uso)
-* Para facilitar el testeo a los otros equipos del curso, la API tiene programadas las siguientes respuestas basadas en los códigos de estado HTTP estándar:
+---
+
+## Paso 2: Verificación del Token de Seguridad
+
+**URL**
+
+`POST /verificar-token`
+
+**Descripción**
+
+Recibe el código dinámico generado previamente y completa el proceso de autenticación.
+
+**Body (JSON)**
 
 ```json
-Escenario de NegocioEntrada de Prueba (dni_cuil)Código HTTPEstado en JSONCamino Feliz (Éxito)Cualquier DNI válido (ej: 35123456)200 OKValidacion_ExitosaControl de Fraude11111111403 ForbiddenValidacion_FallidaError de FormatoMenos de 7 dígitos o letras (ej: abc)422 UnprocessableDatos_InvalidosCampos Vacíos"" (Vacío)400 Bad RequestError detallado
+{
+  "dni_cuil": "42333444",
+  "token": "AQUÍ_EL_CÓDIGO_DE_6_DÍGITOS"
+}
+```
 
-### Instalación y Ejecución Local
-**Si querés correr este módulo en tu máquina para hacer pruebas locales, seguí estos pasos:**
+---
 
-* **Clonar el repositorio:**
-```json
-git clone [https://github.com/tiagoonorato-dv/api-vericheck-grupo6.git](https://github.com/tiagoonorato-dv/api-vericheck-grupo6.git)
-cd api-vericheck-grupo6]
+# Escenarios de Prueba
 
-* **Instalar las dependencias obligatorias:**
-```json
+| Escenario | Endpoint | Datos | Resultado Esperado |
+|-----------|----------|-------|--------------------|
+| Camino Feliz (Paso 1) | `/validar` | Cualquier DNI válido | `Paso1_Exitoso` (genera token en consola) |
+| Camino Feliz (Paso 2) | `/verificar-token` | DNI válido + Token correcto | **200 OK** - `Validacion_Exitosa` |
+| Control de Fraude | `/validar` | DNI `11111111` | **403 Forbidden** |
+| Token Erróneo | `/verificar-token` | DNI válido + Token incorrecto | **401 Unauthorized** |
+
+---
+
+# Instalación y Ejecución Local
+
+## 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/tiagoonorato-dv/api-vericheck-grupo6.git
+cd api-vericheck-grupo6
+```
+
+## 2. Instalar las dependencias
+
+```bash
 pip install -r requirements.txt
+```
 
-* **Iniciar el servidor de desarrollo:**
-```json
+## 3. Ejecutar el servidor
+
+```bash
 uvicorn main:app --reload
+```
 
-* **Interfaz de Pruebas Interactiva (Swagger):**
-Una vez encendido, ingresá desde tu navegador a: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+---
+
+# Documentación Interactiva (Swagger)
+
+Una vez iniciado el servidor, acceder desde el navegador a:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+---
+
+# Tecnologías Utilizadas
+
+- Python 3.10+
+- FastAPI
+- Uvicorn
+
+---
+
+# Autor
+
+**Grupo 6 - Seguridad y Despliegue**
+
+Proyecto desarrollado para la materia **Aplicaciones Móviles**.

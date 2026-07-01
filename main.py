@@ -2,14 +2,14 @@ from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
+import random
 
 app = FastAPI(
-    title="API VeriCheck Premium - Grupo 6",
-    description="Servicio de validación de identidad con códigos de estado HTTP y auditoría integrada",
-    version="1.3.0"
+    title="API VeriCheck 2FA - Grupo 6",
+    description="Servicio de Autenticación de Dos Pasos (2FA) con Tokens Temporales",
+    version="2.0.0"
 )
 
-# Habilitar CORS para evitar bloqueos entre grupos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,54 +18,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class DatosCliente(BaseModel):
+
+base_tokens = {}
+
+class DatosPaso1(BaseModel):
     dni_cuil: str
     nombre_empresa: str
 
-# MEJORA: Endpoint de Health Check (para ver si la API está viva en Render sin mandar datos)
+class DatosPaso2(BaseModel):
+    dni_cuil: str
+    token: str
+
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health_check():
     return {
         "status": "online",
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "grupo": "Grupo 6 - Seguridad y Despliegue"
+        "grupo": "Grupo 6 - Seguridad y Despliegue (2FA Activo)"
     }
 
+
 @app.post("/validar", status_code=status.HTTP_200_OK)
-def punto_conexion_validacion(info: DatosCliente, request: Request):
+def paso_1_solicitar_token(info: DatosPaso1, request: Request):
     dni_recibido = info.dni_cuil.strip()
     empresa_recibida = info.nombre_empresa.strip()
-    timestamp_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ip_cliente = request.client.host
     
-    # 1. Validar campos vacíos
-    if not dni_recibido or not empresa_recibida:
-        print(f"[{timestamp_actual}] [AUDITORIA LOG] IP: {ip_cliente} | Acción: Intento_Validacion | Resultado: Datos_Incompletos ⚠️")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El DNI/CUIL y el Nombre de Empresa son campos obligatorios y no pueden estar vacíos."
-        )
-
-    # 2. Control de Fraude (Lista negra) -> Devuelve un 403 Forbidden (Acceso denegado/prohibido)
-    if dni_recibido == "11111111":
-        print(f"[{timestamp_actual}] [AUDITORIA LOG] IP: {ip_cliente} | DNI: {dni_recibido} | Acción: Validar | Resultado: Alerta_Fraude 🚨")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Validacion_Fallida: El documento ingresado posee alertas activas por intento de fraude en VeriCheck."
-        )
-        
-    # 3. Validación de formato técnico -> Devuelve un 422 Unprocessable Entity
-    if not dni_recibido.isdigit() or len(dni_recibido) < 7:
-        print(f"[{timestamp_actual}] [AUDITORIA LOG] IP: {ip_cliente} | Entrada: {dni_recibido} | Acción: Validar | Resultado: Formato_Invalido")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Datos_Invalidos: El formato del documento debe contener únicamente números (mínimo 7 dígitos)."
-        )
     
-    # 4. Flujo Principal Exitoso
-    print(f"[{timestamp_actual}] [AUDITORIA LOG] IP: {ip_cliente} | DNI: {dni_recibido} | Empresa: {empresa_recibida} | Resultado: Exitoso ✅")
+    if not dni_recibido or not empresa_recibida:
+        raise HTTPException(status_code=400, detail="Campos obligatorios vacíos.")
+
+    
+    if dni_recibido == "11111111":
+        print(f"[{timestamp}] [AUDITORIA 🚨] IP: {ip_cliente} | DNI: {dni_recibido} | Bloqueado por Fraude")
+        raise HTTPException(status_code=403, detail="Validacion_Fallida: Alertas activas por intento de fraude.")
+        
+    if not dni_recibido.isdigit() or len(dni_recibido) < 7:
+        raise HTTPException(status_code=422, detail="Formato de documento inválido.")
+    
+    
+    token_generado = str(random.randint(100000, 999999))
+    
+    
+    base_tokens[dni_recibido] = token_generado
+    
+    
+    print("\n" + "="*50)
+    print(f"[{timestamp}] [✉️ SMS/MAIL SIMULATOR] Enviando a {empresa_recibida}")
+    print(f"👉 TOKEN SEGURO (2FA) PARA DNI {dni_recibido}: [ {token_generado} ]")
+    print("="*50 + "\n")
+    
+    print(f"[{timestamp}] [AUDITORIA ✅] IP: {ip_cliente} | DNI: {dni_recibido} | Paso 1 Exitoso. Esperando verificación de token.")
+    
+    return {
+        "status": "Paso1_Exitoso",
+        "mensaje": "Datos correctos. Segundo factor requerido. Ingrese el token enviado para finalizar.",
+        "proveedor": "VeriCheck 2FA"
+    }
+
+
+@app.post("/verificar-token", status_code=status.HTTP_200_OK)
+def paso_2_verificar_token(info: DatosPaso2, request: Request):
+    dni_recibido = info.dni_cuil.strip()
+    token_ingresado = info.token.strip()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ip_cliente = request.client.host
+    
+    
+    if dni_recibido not in base_tokens:
+        print(f"[{timestamp}] [AUDITORIA ⚠️] IP: {ip_cliente} | DNI: {dni_recibido} | Intentó validar token sin Paso 1")
+        raise HTTPException(status_code=400, detail="Error: No se ha solicitado un token previo para este documento.")
+        
+    
+    token_correcto = base_tokens[dni_recibido]
+    
+    if token_ingresado != token_correcto:
+        print(f"[{timestamp}] [AUDITORIA ❌] IP: {ip_cliente} | DNI: {dni_recibido} | Token Incorrecto: {token_ingresado}")
+        raise HTTPException(status_code=401, detail="Token inválido o expirado. Acceso denegado.")
+        
+    
+    del base_tokens[dni_recibido]
+    
+    print(f"[{timestamp}] [AUDITORIA 🔑] IP: {ip_cliente} | DNI: {dni_recibido} | Autenticación 2FA COMPLETADA CON ÉXITO")
+    
     return {
         "status": "Validacion_Exitosa",
-        "mensaje": f"Identidad confirmada para '{empresa_recibida}'. Documento válido.",
-        "proveedor": "VeriCheck"
+        "mensaje": f"Identidad confirmada mediante segundo factor de autenticación (2FA).",
+        "proveedor": "VeriCheck 2FA"
     }
