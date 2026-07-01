@@ -115,5 +115,3 @@ http://127.0.0.1:8000/docs
 # Autor
 
 **Grupo 6 - Seguridad y Despliegue**
-
-Proyecto desarrollado para la materia **Aplicaciones Móviles**.
